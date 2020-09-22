@@ -3,8 +3,9 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
+use App\Http\Requests\PostRequest;
 use App\Post;
-
+use App\Tag;
 
 class PostController extends Controller
 {
@@ -15,13 +16,36 @@ class PostController extends Controller
      */
     public function index()
     {
-        $posts = Post::all();
-        $posts->load('category','user');
+        $q = \Request::query();
+
+        if(isset($q['category_id'])){
+            $posts = Post::latest()->where('category_id',$q['category_id'])->paginate(5);
+            $posts->load('category','user','tags');
+
+            return view('posts.index',[
+                'posts' => $posts,
+                'category_id' => $q['category_id'],
+            ]);
+
+        }  if(isset($q['tag_name'])){
+
+            $posts = Post::latest()->where('content','like', "%{$q['tag_name']}%")->paginate(5);
+            $posts->load('category','user','tags');
+
+            return view('posts.index',[
+                'posts' => $posts,
+                'tag_name' => $q['tag_name'],
+            ]);
         
-        return view('posts.index',[
-            'posts' => $posts,
-        ]);
-    }
+        }else {
+            $posts = Post::latest()->paginate(5);
+            $posts->load('category','user','tags');
+
+            return view('posts.index',[
+                'posts' => $posts,
+            ]);
+        }
+    } 
 
     /**
      * Show the form for creating a new resource.
@@ -30,7 +54,8 @@ class PostController extends Controller
      */
     public function create()
     {
-        //
+        return view('posts.create', [
+]);
     }
 
     /**
@@ -39,9 +64,41 @@ class PostController extends Controller
      * @param  \Illuminate\Http\Request  $request
      * @return \Illuminate\Http\Response
      */
-    public function store(Request $request)
+    public function store(PostRequest $request)
     {
-        //
+        if($request->file('image')->isValid()) {
+            $post = new Post;
+            // $input = $request->only($post->getFillable());
+            $post->user_id = $request->user_id;
+            $post->category_id = $request->category_id;
+            $post->content = $request->content;
+            $post->title = $request->title;
+
+            $filename = $request->file('image')->store('public/image');
+            
+            $post->image = basename($filename);
+
+            // contentからtagを抽出
+            preg_match_all('/#([a-zA-Z0-9０-９ぁ-んァ-ヶー一-龠]+)/u', $request->content, $match);
+
+            $tags = [];
+            foreach ($match[1] as $tag) {
+                $found = Tag::firstOrCreate(['tag_name' => $tag]);
+
+                array_push($tags, $found);
+            }
+            
+            $tag_ids = [];
+
+            foreach ($tags as $tag) {
+                array_push($tag_ids, $tag['id']);
+            }
+
+            $post->save();
+            $post->tags()->attach($tag_ids);
+        }
+
+        return redirect('/');
     }
 
     /**
@@ -50,9 +107,12 @@ class PostController extends Controller
      * @param  int  $id
      * @return \Illuminate\Http\Response
      */
-    public function show($id)
+    public function show(Post $post)
     {
-        //
+        $post->load('category','user','comments.user');
+        return view('posts.show', [
+            'post' => $post,
+        ]);
     }
 
     /**
@@ -87,5 +147,20 @@ class PostController extends Controller
     public function destroy($id)
     {
         //
+    }
+
+    public function search(Request $request)
+    {
+        $posts = Post::where('title', 'like', "%{$request->search}%")
+        ->orWhere('content','like',"%{$request->search}%")
+        ->paginate(5);
+
+        $search_result = $request->search.'の検索結果'.$posts->total().'件';
+
+        return view('posts.index',[
+            'posts' => $posts,
+            'search_result' => $search_result,
+            'search_query' => $request->search
+        ]);
     }
 }

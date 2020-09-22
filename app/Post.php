@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 class Post extends Model
 {
     protected $fillable = [
-        'user_id', 'category_id', 'content', 'title', 
+        'user_id', 'category_id', 'content', 'title', 'image'
     ];
 
     public function category(){
@@ -16,7 +16,13 @@ class Post extends Model
     }
 
     public function user(){
-        //投稿は１つのカテゴリーに属する
         return $this->belongsTo(\App\User::class,'user_id');
+    }
+
+    public function comments(){
+        return $this->hasMany(\App\Comment::class,'post_id','id');
+    }
+    public function tags(){
+        return $this->belongsToMany(\App\Tag::class);
     }
 }
